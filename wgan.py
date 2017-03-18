@@ -102,10 +102,15 @@ def train(params):
         real_sources = next_real_batch(params)
         fake_sources = next_fake_batch(params)
 
-        loss, g_step = dcgan.train_discriminator(fake_sources, real_sources)
+        # arXiv:1701.07875
+        # n_critic = 5, no longer need to blance generator and discriminator's
+        # capacity properly.
+        for _ in range(5):
+            dcgan.train_discriminator(fake_sources, real_sources)
+
         loss, g_step = dcgan.train_generator(fake_sources)
 
-        print 'iteration: {}'.format(iteration)
+        print 'global step: {}'.format(g_step)
 
         if g_step % 100 == 0:
             dcgan.save_checkpoint()
@@ -145,11 +150,15 @@ def generate(params):
 
 if __name__ == '__main__':
     # training parameters
+
+    # arXiv:1701.07875
+    # batch size of all experimants are all 64.
+
     params = {}
     params['path_dir_results'] = './results/'
     params['training_iterations'] = 20000000
-    params['discriminator_batch_size'] = 128
-    params['generator_batch_size'] = 128
+    params['discriminator_batch_size'] = 64
+    params['generator_batch_size'] = 64
     params['generator_seed_size'] = 100
 
     maybe_make_dir(params['path_dir_results'])

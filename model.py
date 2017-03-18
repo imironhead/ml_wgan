@@ -68,6 +68,9 @@ class Dcgan(object):
     def generator(seed):
         """
         build the generator network.
+
+        arXiv:1701.07875
+        do not need batch_norm for generator with wgan.
         """
         weights_initializer = tf.truncated_normal_initializer(stddev=0.02)
 
@@ -77,7 +80,7 @@ class Dcgan(object):
             inputs=seed,
             num_outputs=4 * 4 * 1024,
             activation_fn=tf.nn.relu,
-            normalizer_fn=tf.contrib.layers.batch_norm,
+            normalizer_fn=None,
             weights_initializer=weights_initializer,
             scope='g_project')
 
@@ -92,20 +95,12 @@ class Dcgan(object):
                 # arXiv:1511.06434v2
                 # use tanh in output layer
                 activation_fn = tf.nn.tanh
-
-                # arXiv:1511.06434v2
-                # use batch norm except the output layer
-                normalizer_fn = None
             else:
                 num_outputs = 2 ** (9 - layer_idx)
 
                 # arXiv:1511.06434v2
                 # use ReLU
                 activation_fn = tf.nn.relu
-
-                # arXiv:1511.06434v2
-                # use batch norm
-                normalizer_fn = tf.contrib.layers.batch_norm
 
             target = tf.contrib.layers.convolution2d_transpose(
                 inputs=target,
@@ -114,7 +109,7 @@ class Dcgan(object):
                 stride=2,
                 padding='SAME',
                 activation_fn=activation_fn,
-                normalizer_fn=normalizer_fn,
+                normalizer_fn=None,
                 weights_initializer=weights_initializer,
                 scope='g_conv_t_{}'.format(layer_idx))
 
@@ -150,9 +145,11 @@ class Dcgan(object):
         # judge both real and fake data with the same network (shared).
         discriminate_fake = Dcgan.discriminator(self._generate_fake, True)
 
-        self._loss_discriminator = -tf.reduce_mean(
-            tf.log(discriminate_real) + tf.log(1.0 - discriminate_fake))
-        self._loss_generator = -tf.reduce_mean(tf.log(discriminate_fake))
+        # arXiv:1701.07875
+        # earth move loss
+        self._loss_discriminator = \
+            tf.reduce_mean(discriminate_real - discriminate_fake)
+        self._loss_generator = tf.reduce_mean(discriminate_fake)
 
         trainable_variables = tf.trainable_variables()
 
@@ -163,10 +160,12 @@ class Dcgan(object):
         for idx, variable in enumerate(trainable_variables):
             print idx, variable.name
 
-        trainer_generator = tf.train.AdamOptimizer(
-            learning_rate=0.0002, beta1=0.5)
-        trainer_discriminator = tf.train.AdamOptimizer(
-            learning_rate=0.0002, beta1=0.5)
+        # arXiv:1701.07875
+        # use RMSProp. Adam is not stable in wgan.
+        trainer_generator = \
+            tf.train.RMSPropOptimizer(learning_rate=0.00005)
+        trainer_discriminator = \
+            tf.train.RMSPropOptimizer(learning_rate=0.00005)
 
         # minimize the loss to train the generator and discriminator.
         gradients_generator = trainer_generator.compute_gradients(
@@ -178,6 +177,12 @@ class Dcgan(object):
             gradients_generator, global_step=self._global_step)
         self._train_discriminator = trainer_discriminator.apply_gradients(
             gradients_discriminator)
+
+        # arXiv:1701.07875
+        # clip w_critic
+        self._clip_discriminator = [
+            w.assign(tf.clip_by_value(w, -0.01, 0.01))
+            for w in trainable_variables[10:]]
 
         self._session = tf.Session()
 
@@ -246,6 +251,10 @@ class Dcgan(object):
         feeds = {self._seed: seed_sources, self._real: real_sources}
 
         _, loss, g_step, summary = self._session.run(fetch, feed_dict=feeds)
+
+        # arXiv:1701.07875
+        # clip parameters of critic.
+        self._session.run(self._clip_discriminator)
 
         self._reporter.add_summary(summary, g_step)
 
