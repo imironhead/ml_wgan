@@ -53,14 +53,17 @@ class Dcgan(object):
         # for fully connected layer
         source = tf.contrib.layers.flatten(source)
 
+        # arXiv:1701.07875
+        # Figure 3: DCGAN without the sigmoid
+
         # fully connected layer to binary classify
-        source = tf.contrib.layers.fully_connected(
-            inputs=source,
-            num_outputs=1,
-            activation_fn=tf.nn.sigmoid,
-            weights_initializer=weights_initializer,
-            scope='d_out',
-            reuse=reuse)
+        # source = tf.contrib.layers.fully_connected(
+        #     inputs=source,
+        #     num_outputs=1,
+        #     activation_fn=tf.nn.sigmoid,
+        #     weights_initializer=weights_initializer,
+        #     scope='d_out',
+        #     reuse=reuse)
 
         return source
 
